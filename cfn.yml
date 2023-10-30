@@ -8,20 +8,18 @@ Parameters:
 
   DomainName:
     Description: The full domain name for the web application (e.g., kittens.clarusway.us)
-    Type: AWS::Route53::HostedZone::Id
-
+    Type: String
+    AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
 Resources:
   KittensAppBuckettx:
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Ref DomainName
       PublicAccessBlockConfiguration:
-        BlockPublicAcls: false
-        BlockPublicPolicy: false
-        IgnorePublicAcls: false
-        RestrictPublicBuckets: false
+        BlockPublicAcls: FALSE
       OwnershipControls:
         Rules:
-          - ObjectOwnership: ObjectWriter
+          - ObjectOwnership: BucketOwnerEnforced
       WebsiteConfiguration:
         IndexDocument: index.html
   KittensAppBucketPolicy:
@@ -35,41 +33,51 @@ Resources:
             Action:
               - s3:GetObject
             Resource: !Sub arn:aws:s3:::${KittensAppBuckettx}/*
-
   KittensCloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
+        Aliases:
+          - !Ref DomainName
         Comment: Kittens Carousel Distribution
-        DefaultRootObject: index.html
-        Enabled: true
-        Origins:
-          - Id: S3Origin
-            DomainName: !GetAtt KittensAppBuckettx.RegionalDomainName
-            S3OriginConfig:
-              OriginAccessIdentity: ''
-        DefaultCacheBehavior:
-          TargetOriginId: S3Origin
-          ViewerProtocolPolicy: redirect-to-https
+        DefaultCacheBehavior:  
           AllowedMethods:
             - GET
             - HEAD
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           Compress: true
-          ForwardedValues:
-            QueryString: false
-            Cookies:
-              Forward: none
+          TargetOriginId: yalcincfn
+          ViewerProtocolPolicy: allow-all
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        Origins:
+          - CustomOriginConfig: 
+              OriginProtocolPolicy: http-only
+            DomainName: !Select [2, !Split ["/", !GetAtt KittensAppBuckettx.WebsiteURL]]
+            Id: yalcincfn
+        PriceClass: PriceClass_All
         ViewerCertificate:
           AcmCertificateArn: arn:aws:acm:us-east-1:487583754392:certificate/88f655a4-1ed0-4bed-8419-5fc8a636d59b
-          MinimumProtocolVersion: TLSv1
+          MinimumProtocolVersion: TLSv1.2_2021
           SslSupportMethod: sni-only
-          
-
+  KittenDNSName:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: Z00740703LMHFQKLS0GGL
+      RecordSets:
+        - AliasTarget:
+            DNSName: !GetAtt KittensCloudFrontDistribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2
+          Name: !Ref DomainName
+          Type: A
 Outputs:
-  KittensDomainName:
-    Description: Full Domain Name of Kittens Carousel Application
-    Value: !Ref DomainName
-
   KittensCloudFrontEndpoint:
     Description: Endpoint for Kittens CloudFront Distribution
     Value: !GetAtt KittensCloudFrontDistribution.DomainName
+  FullDomainName:
+    Description: Full Domain Name of my Application
+    Value: !Ref DomainName
+  BucketName: 
+    Description: S3 Bucket URL for Kittens Website
+    Value: !GetAtt KittensAppBuckettx.WebsiteURL
